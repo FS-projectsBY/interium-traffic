@@ -1,0 +1,98 @@
+rules_version = '2';
+// Правила доступа к общей базе посещаемости ТЦ «Интериум».
+// • Администраторы — список adminEmails() ниже (тот же, что в js/config.js): всё, включая выдачу прав и удаление.
+// • Роль editor («Охрана») — вносит и исправляет посещаемость и события.
+// • Роль viewer («Просмотр») — только чтение.
+// Роль хранится в users/{почта}. Без роли данные не читаются.
+// Вход — логин и пароль (Firebase Email/Password). Логин сотрудника — служебный адрес «логин@interium.local».
+// Роль даёт только администратор; логин без роли ничего не видит, даже если создан посторонним.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Администраторы — укажите те же адреса, что в js/config.js (строчными буквами).
+    function adminEmails() { return ['snabjenecc@gmail.com']; }
+    function email() { return request.auth.token.email.lower(); }
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    // Администратор — только с подтверждённой почтой: без доступа к почте права не получить.
+    function isAdmin() { return signedIn() && email() in adminEmails() && request.auth.token.email_verified == true; }
+    function role() {
+      let path = /databases/$(database)/documents/users/$(email());
+      return exists(path) && get(path).data.get('active', true) == true ? get(path).data.role : 'none';
+    }
+    function canView() { return isAdmin() || (signedIn() && role() in ['viewer', 'editor', 'admin']); }
+    function canEdit() { return isAdmin() || (signedIn() && role() in ['editor', 'admin']); }
+    function canAdmin() { return isAdmin() || (signedIn() && role() == 'admin'); }
+    function nonNegInt(v) { return v is int && v >= 0 && v < 1000000; }
+    function isDate(v) { return v is string && v.matches('^20[0-9]{2}-[01][0-9]-[0-3][0-9]$'); }
+    // Каждая запись данных ссылается на запись журнала, созданную в той же операции.
+    function logged(d) { return d.logId is string && existsAfter(/databases/$(database)/documents/log/$(d.logId)); }
+    function stamped(d) { return d.updatedBy == email() && d.updatedAt == request.time; }
+
+    function validDay(id) {
+      let d = request.resource.data;
+      return d.date == id && isDate(id)
+        && d.entries is list && d.entries.size() == 3
+        && nonNegInt(d.entries[0]) && nonNegInt(d.entries[1]) && nonNegInt(d.entries[2])
+        && d.total == d.entries[0] + d.entries[1] + d.entries[2]
+        && (!('passage' in d) || d.passage == null || nonNegInt(d.passage))
+        && (!('source' in d) || (d.source is string && d.source.size() <= 250))
+        && (!('issues' in d) || (d.issues is list && d.issues.size() <= 10))
+        && (!('counterReadings' in d) || (d.counterReadings is list && d.counterReadings.size() == 7))
+        && (!('rawPassage' in d) || nonNegInt(d.rawPassage))
+        && (!('inputMode' in d) || d.inputMode in ['raw', 'visits'])
+        && stamped(d) && logged(d)
+        && d.keys().hasOnly(['date', 'entries', 'total', 'passage', 'source', 'issues', 'row', 'inputMode', 'counterReadings', 'rawPassage', 'updatedAt', 'updatedBy', 'logId']);
+    }
+    match /days/{id} {
+      allow read: if canView();
+      allow create, update: if canEdit() && validDay(id);
+      allow delete: if canAdmin();
+    }
+
+    function validEvent() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 180
+        && (d.date == '' || isDate(d.date)) && (d.end == '' || (isDate(d.end) && d.date != '' && d.end >= d.date))
+        && d.type in ['workshop', 'opening', 'sale', 'other'] && d.status in ['confirmed', 'tentative']
+        && (d.status == 'tentative' || d.date != '')
+        && d.source is string && d.source.size() <= 1000 && d.note is string && d.note.size() <= 2000
+        && d.timeline is bool && d.excludeBaseline is bool && d.levelShift is bool
+        && d.sources is list && d.sources.size() <= 30
+        && stamped(d) && logged(d)
+        && d.keys().hasOnly(['date', 'end', 'title', 'type', 'status', 'source', 'note', 'dateBasis', 'published', 'sources', 'timeline', 'excludeBaseline', 'levelShift', 'updatedAt', 'updatedBy', 'logId']);
+    }
+    match /events/{id} {
+      allow read: if canView();
+      allow create, update: if canEdit() && id.size() <= 120 && validEvent();
+      allow delete: if canAdmin();
+    }
+
+    // Журнал изменений: только добавление, автор и время — настоящие. Изменять и удалять нельзя.
+    match /log/{id} {
+      allow read: if canAdmin();
+      allow create: if canEdit()
+        && request.resource.data.by == email() && request.resource.data.at == request.time
+        && request.resource.data.target is string && request.resource.data.target.size() <= 120
+        && request.resource.data.keys().hasOnly(['at', 'by', 'action', 'target', 'before', 'after'])
+        && (request.resource.data.action in ['day.create', 'day.update', 'event.create', 'event.update']
+            || (request.resource.data.action in ['day.delete', 'event.delete', 'import'] && canAdmin()));
+      allow update, delete: if false;
+    }
+
+    // Комментарии к месяцам и неделям: читают все с доступом, пишет администратор.
+    match /notes/{key} {
+      allow read: if canView();
+      allow create, update: if canAdmin() && key.matches('^(month|week)-20[0-9]{2}-[01][0-9](-[0-3][0-9])?$')
+        && request.resource.data.text is string && request.resource.data.text.size() <= 3000
+        && stamped(request.resource.data) && request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy']);
+      allow delete: if canAdmin();
+    }
+
+    // Права сотрудников. Каждый видит свою запись; менять может только администратор.
+    match /users/{userEmail} {
+      allow read: if signedIn() && (userEmail == email() || canAdmin());
+      allow write: if canAdmin() && userEmail == userEmail.lower();
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}
