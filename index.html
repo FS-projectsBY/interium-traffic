@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Интериум · Посещаемость</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 35 35'%3E%3Crect x='1' y='17' width='7' height='16' rx='2' fill='%2323634d'/%3E%3Crect x='13' y='8' width='7' height='25' rx='2' fill='%2323634d'/%3E%3Crect x='25' y='1' width='7' height='32' rx='2' fill='%2323634d'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg width="32" height="32" viewBox="0 0 35 35" aria-hidden="true"><rect x="1" y="17" width="7" height="16" rx="2" fill="currentColor"/><rect x="13" y="8" width="7" height="25" rx="2" fill="currentColor"/><rect x="25" y="1" width="7" height="32" rx="2" fill="currentColor"/></svg><div>ИНТЕРИУМ<span>ДЕПХОЛ · ПОСЕЩАЕМОСТЬ</span></div></div>
+  <div class="top-actions" id="userBox" hidden>
+    <span class="user"><strong id="userName"></strong><small id="userRole"></small></span>
+    <span id="syncState" class="sync" title="Состояние связи с общей базой"></span>
+    <button class="primary" id="goInput" data-need="editor">＋ Ввести посещаемость</button>
+    <button id="logout">Выйти</button>
+  </div>
+</header>
+<nav id="nav" aria-label="Разделы" hidden>
+  <button data-view="report" class="active">Аналитика</button>
+  <button data-view="input" data-need="editor">Ввод данных</button>
+  <button data-view="events">События</button>
+  <button data-view="admin" data-need="admin">Управление</button>
+</nav>
+<div id="demoBanner" class="demo-banner" hidden>Демонстрационный режим: данные хранятся только в этом браузере и никому не видны.</div>
+<main>
+<div id="notice" role="status" hidden></div>
+
+<section id="view-login" class="login" hidden>
+  <form id="loginForm" class="panel login-card" novalidate>
+    <p class="eyebrow">ПОСЕЩАЕМОСТЬ ТЦ «ИНТЕРИУМ»</p>
+    <h1>Вход</h1>
+    <div id="loginReal">
+      <label>Логин<input id="loginName" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Пароль<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button class="primary wide" type="submit">Войти</button>
+      <button type="button" class="text-button" id="forgot">Забыли пароль?</button>
+    </div>
+    <div id="setupBox" hidden>
+      <p>Первый вход администратора <b id="setupEmail"></b>. Придумайте пароль — не меньше 10 символов.</p>
+      <label>Пароль<input id="setupPassword" type="password" autocomplete="new-password"></label>
+      <label>Пароль ещё раз<input id="setupPassword2" type="password" autocomplete="new-password"></label>
+      <button type="button" class="primary wide" id="setupCreate">Создать вход администратора</button>
+    </div>
+    <div id="loginDemo" hidden>
+      <p class="muted">Выберите роль для проверки:</p>
+      <div class="demo-roles"><button type="button" data-demo-role="editor" class="primary">Охрана — ввод</button><button type="button" data-demo-role="viewer">Просмотр</button><button type="button" data-demo-role="admin">Администратор</button></div>
+    </div>
+    <p id="loginError" role="alert"></p>
+    <p class="muted small">Логин и пароль выдаёт администратор. Охрана вносит данные, остальные сотрудники видят отчёты.</p>
+  </form>
+</section>
+
+<section id="view-noaccess" hidden>
+  <div class="panel login-card"><h1 id="noAccessTitle">Нет доступа</h1><p id="noAccessText"></p><div id="verifyBox" hidden><p>Откройте письмо от Firebase и нажмите ссылку подтверждения. Затем вернитесь сюда.</p><div class="demo-roles"><button class="primary" id="verifyDone">Я подтвердил почту</button><button id="verifyResend">Отправить письмо ещё раз</button></div></div><button id="noAccessLogout">Выйти</button></div>
+</section>
+
+<section id="view-report" hidden>
+  <div id="pulse" class="pulse"></div>
+  <div class="heading">
+    <div><p class="eyebrow">ПОСЕЩАЕМОСТЬ ТОРГОВОГО ЦЕНТРА</p><h1 id="periodTitle"></h1><p id="periodSubtitle" class="muted"></p></div>
+    <div class="report-actions"><button id="copyText">Скопировать текст</button><button id="exportPng">Картинка для Telegram</button><button id="print">Печать / PDF</button></div>
+  </div>
+  <div class="period-controls">
+    <div class="period-switch" role="group" aria-label="Период отчёта">
+      <button data-period="month" aria-pressed="true" class="active">Месяц</button><button data-period="week" aria-pressed="false">Неделя</button><button data-period="all" aria-pressed="false">Весь период</button><button data-period="custom" aria-pressed="false">Свои даты</button>
+    </div>
+    <div class="filters">
+      <div id="monthWrap" class="month-picker"><button id="prevMonth" aria-label="Предыдущий месяц">←</button><label>Месяц<select id="month"></select></label><button id="nextMonth" aria-label="Следующий месяц">→</button></div>
+      <div id="weekWrap" class="month-picker" hidden><button id="prevWeek" aria-label="Предыдущая неделя">←</button><label>Любой день недели<input type="date" id="weekDay"></label><button id="nextWeek" aria-label="Следующая неделя">→</button></div>
+      <label id="startWrap" hidden>Начало<input type="date" id="start"></label>
+      <label id="endWrap" hidden>Окончание<input type="date" id="end"></label>
+      <button id="applyPeriod" hidden>Показать</button>
+      <span id="coverageLabel" aria-live="polite"></span>
+    </div>
+  </div>
+  <p id="headline" class="headline"></p>
+  <div class="kpis" id="kpis"></div>
+  <article class="panel insights-panel">
+    <div class="panel-heading"><div><h2>Что происходило</h2><p>Разбор по цифрам и календарю: праздники, школьные каникулы, события, открытия. Это наблюдения — совпадение по времени не доказывает причину.</p></div></div>
+    <ul id="insights" class="insights"></ul>
+    <div id="note" class="note"></div>
+  </article>
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Посещения по дням</h2><p id="chartSubtitle"></p></div>
+      <span class="legend"><i></i>Будни <i class="weekend"></i>Сб, Вс <i class="holiday"></i>Праздник <i class="trend"></i>Среднее за 7 дней <i class="ghost" id="ghostLegend" hidden></i><span id="ghostLegendText" hidden>Прошлая неделя</span> <i class="amber"></i>Событие</span></div>
+    <label class="check-label chart-context"><input type="checkbox" id="showContext">Показывать также акции и дополнительные новости</label>
+    <div id="chart" class="chart-scroll"></div>
+    <div id="chartNotes" class="chart-notes"></div>
+  </article>
+  <div class="grid2">
+    <article class="panel"><h2>Профиль недели</h2><p class="muted" id="weekdayNote"></p><div id="weekdayChart"></div></article>
+    <article class="panel"><h2>Месяц к месяцу</h2><p class="muted">Средний день — его можно сравнивать при разной длине месяца</p><div id="monthChart"></div></article>
+  </div>
+  <div class="grid2">
+    <article class="panel"><h2>Входы</h2><p class="muted" id="entrancesNote"></p><div id="entrances"></div><p class="small-note" id="passageNote"></p></article>
+    <article class="panel"><div class="panel-heading"><div><h2>События периода</h2><p>Посещения в день события к обычному уровню таких же дней недели</p></div><button class="text-button" id="goEvents">Все события ↗</button></div><div id="reportEvents"></div></article>
+  </div>
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Изменения, которые стоит проверить</h2><p>Дни, отличающиеся от обычного таких же дней недели на 30% и больше (и не меньше чем на 200 посещений)</p></div></div>
+    <div id="anomalies"></div>
+  </article>
+  <div id="quality"></div>
+  <details class="method panel">
+    <summary>Как считается</summary>
+    <ul>
+      <li><b>Посещения</b> — суточные итоги по счётчикам трёх входов. Это расчёт по проходам, а не число уникальных людей. Если охрана вводит показания приборов, программа делит сумму по каждому входу на 2 и округляет, как в исходном Excel; готовые итоги повторно не делятся. Правильность деления на 2 нужно подтвердить по документации на счётчики.</li>
+      <li><b>Переход</b> учитывается отдельно и не входит в общий итог.</li>
+      <li><b>Обычный уровень</b> — среднее за 3–4 предыдущих таких же дня недели в пределах 8 недель. Не берутся праздники, дни подтверждённых событий и дни до крупного открытия, после которого изменился общий уровень (например, DNS).</li>
+      <li><b>Изменение к прошлому периоду</b> сравнивает средний день. Для неполного месяца берутся те же числа прошлого месяца.</li>
+      <li><b>Линия тренда</b> — среднее за 7 последних дней; нужна информация минимум за 5 из них.</li>
+      <li>Пустой день не считается нулём. Совпадение роста с событием не доказывает, что рост вызван событием.</li>
+    </ul>
+    <p class="muted" id="reportSource"></p>
+  </details>
+</section>
+
+<section id="view-input" hidden>
+  <div class="heading"><div><p class="eyebrow">ЕЖЕДНЕВНЫЙ ВВОД</p><h1>Посещаемость за день</h1><p class="muted">Введите показатели и сохраните. Отчёт обновится у всех сразу.</p></div></div>
+  <div id="missingDays" class="missing-days"></div>
+  <form id="quickForm" class="panel quick-entry" novalidate>
+    <div class="quick-controls">
+      <label>Дата<input id="qDate" type="date" required></label>
+      <label>Что вводим<select id="qMode"><option value="visits">Готовое количество посещений</option><option value="raw">Показания счётчиков за сутки (программа делит на 2)</option></select></label>
+    </div>
+    <p id="qExisting" class="small-note"></p>
+    <div id="quickFields"></div>
+    <div class="quick-bottom">
+      <div class="quick-total"><span>Итого за день</span><strong id="qTotal">—</strong><small id="qCompare"></small></div>
+      <div><button type="submit" class="primary" id="quickSave">Сохранить день</button></div>
+    </div>
+    <div id="qWarnings" class="warning" hidden></div>
+    <p id="qError" role="alert"></p><p id="qSaved" role="status"></p>
+  </form>
+  <h2 class="saved-days-title">Сохранённые дни</h2>
+  <div class="filters"><label>Месяц<input type="month" id="dataMonth"></label><button id="allDays">Вся история</button><span id="dataCount"></span></div>
+  <div class="table-shell"><table><thead><tr><th>Дата</th><th>День</th><th>Вход 1</th><th>Вход 2</th><th>Вход 3</th><th>Всего</th><th>Переход</th><th>Кто внёс</th><th></th></tr></thead><tbody id="dataRows"></tbody></table></div>
+</section>
+
+<section id="view-events" hidden>
+  <div class="heading"><div><p class="eyebrow">КАЛЕНДАРЬ И АНАЛИЗ</p><h1>События торгового центра</h1><p class="muted">Открытия, мастер-классы, акции. Даты можно уточнять.</p></div><button class="primary" id="addEvent" data-need="editor">＋ Добавить событие</button></div>
+  <div class="info-note">Событие сравнивается с обычным уровнем таких же дней недели. Для открытий дополнительно показываются 28 дней до и после. События с неуточнённой датой в расчёт не входят. Канал <a href="https://t.me/interium_by" target="_blank" rel="noopener">ТЦ ИНТЕРИУМ</a> изучен по 28.09.2026; новые события добавляйте вручную.</div>
+  <div class="event-filters">
+    <label>Найти событие<input id="eventSearch" type="search" placeholder="DNS, SCULPT, выставка…"></label>
+    <label>Показать<select id="eventFilter"><option value="all">Все события и новости</option><option value="main">Основной график</option><option value="context">Акции и дополнительные новости</option><option value="uncertain">Даты требуют уточнения</option><option value="shift">Крупные открытия</option></select></label>
+    <span id="eventCount" aria-live="polite"></span>
+  </div>
+  <div id="eventList"></div>
+</section>
+
+<section id="view-admin" hidden>
+  <div class="heading"><div><p class="eyebrow">УПРАВЛЕНИЕ</p><h1>Сотрудники и данные</h1></div></div>
+  <div class="grid2">
+    <article class="panel">
+      <h2>Сотрудники и права</h2>
+      <p class="muted">«Охрана» вносит посещаемость и события. «Просмотр» видит отчёты, но ничего не меняет.</p>
+      <div id="users"></div>
+      <form id="userForm" class="form-grid user-form" novalidate>
+        <label>Логин<input id="uLogin" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="например, ohrana" required></label>
+        <label>Имя<input id="uName" maxlength="120" placeholder="Например, Пост охраны"></label>
+        <label>Роль<select id="uRole"><option value="editor">Охрана — ввод данных</option><option value="viewer" selected>Просмотр</option><option value="admin">Администратор</option></select></label>
+        <label>Пароль (для нового логина)<input id="uPassword" type="text" autocomplete="new-password" minlength="8" placeholder="не меньше 8 символов"></label>
+        <p class="full muted small">Для нового сотрудника задайте логин и пароль и передайте их ему. Чтобы изменить роль существующего, укажите его логин без пароля. Забытый пароль восстановить нельзя: закройте старый логин и создайте новый.</p>
+        <div class="full"><button class="primary" type="submit">Добавить или изменить</button></div>
+        <p id="userError" class="full" role="alert"></p>
+      </form>
+    </article>
+    <article class="panel">
+      <h2>Данные</h2>
+      <p class="muted">Загрузка старой истории нужна один раз. Ежедневная работа идёт через ввод.</p>
+      <div class="stack">
+        <label class="button" for="importFile">Загрузить историю из Excel «Счетчик входов»</label>
+        <label class="button" for="restoreFile">Загрузить резервную копию (JSON)</label>
+        <button id="backup">Скачать резервную копию (JSON)</button>
+        <button id="csv">Скачать таблицу для Excel (CSV)</button>
+      </div>
+      <input type="file" id="importFile" accept=".xlsx,.xls" hidden><input type="file" id="restoreFile" accept=".json" hidden>
+      <h2 class="mt">Журнал изменений</h2>
+      <div id="log" class="log"></div>
+    </article>
+  </div>
+</section>
+<p class="version muted">Версия 2.0 · общая база · <span id="storeKind"></span></p>
+</main>
+<dialog id="modal"><div class="modal-head"><h2 id="modalTitle"></h2><button id="closeModal" aria-label="Закрыть">×</button></div><div id="modalBody"></div><p id="modalError" role="alert"></p><div class="modal-actions"><button id="cancelModal">Отмена</button><button id="confirmModal" class="primary">Сохранить</button></div></dialog>
+<script src="js/core.js"></script>
+<script src="js/insights.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
